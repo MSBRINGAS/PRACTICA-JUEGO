@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Breakout Game Mejorado</title>
+  <!-- Tailwind CSS desde CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen text-white">
+  <h1 class="text-3xl font-bold mb-4">Juego de Breakout Mejorado</h1>
+  <canvas id="gameCanvas" class="bg-black rounded-lg shadow-lg" width="1000" height="600"></canvas>
+
+  <!-- Música de fondo -->
+  <audio id="backgroundMusic" src="https://www.bensound.com/bensound-music/bensound-epic.mp3" loop></audio>
+  <audio id="brickHitSound" src="https://www.soundjay.com/button/sounds/button-16.mp3"></audio>
+  <audio id="lifeLostSound" src="https://www.soundjay.com/button/sounds/button-10.mp3"></audio>
+  <button id="toggleMusic" class="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg">🔊 Desactivar Música</button>
+
+  <!-- Instrucciones -->
+  <div class="mt-6 bg-gray-800 p-4 rounded-lg shadow-md w-3/4">
+    <h2 class="text-2xl font-semibold">Instrucciones:</h2>
+    <ul class="list-disc list-inside">
+      <li>Usa las flechas izquierda (<code>←</code>) y derecha (<code>→</code>) para mover la plataforma.</li>
+      <li>Evita que la pelota caiga al fondo.</li>
+      <li>Destruye todos los bloques para ganar.</li>
+      <li>Tienes 5 vidas. El juego termina cuando las pierdas todas.</li>
+      <li>Haz doble clic en el archivo HTML para ejecutar el juego.</li>
+    </ul>
+  </div>
+
+  <script>
+    // Configuración del canvas
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Reproducir música de fondo automáticamente
+    const backgroundMusic = document.getElementById("backgroundMusic");
+    const brickHitSound = document.getElementById("brickHitSound");
+    const lifeLostSound = document.getElementById("lifeLostSound");
+    backgroundMusic.volume = 0.2; // Ajustar volumen
+    backgroundMusic.play();
+
+    // Botón de control de música
+    const toggleMusicButton = document.getElementById("toggleMusic");
+    let isMusicPlaying = true;
+    toggleMusicButton.addEventListener("click", () => {
+      if (isMusicPlaying) {
+        backgroundMusic.pause();
+        toggleMusicButton.textContent = "🔇 Activar Música";
+      } else {
+        backgroundMusic.play();
+        toggleMusicButton.textContent = "🔊 Desactivar Música";
+      }
+      isMusicPlaying = !isMusicPlaying;
+    });
+
+    // Variables del juego
+    let ballX = canvas.width / 2;
+    let ballY = canvas.height - 30;
+    let ballRadius = 10;
+    let ballDX = 4;
+    let ballDY = -4;
+
+    const paddleHeight = 10;
+    const paddleWidth = 120;
+    let paddleX = (canvas.width - paddleWidth) / 2;
+
+    let rightPressed = false;
+    let leftPressed = false;
+
+    const brickRowCount = 6;
+    const brickColumnCount = 12;
+    const brickWidth = 75;
+    const brickHeight = 25;
+    const brickPadding = 10;
+    const brickOffsetTop = 40;
+    const brickOffsetLeft = 35;
+
+    let bricks = [];
+    let lives = 5;
+
+    // Inicializar ladrillos
+    function initBricks() {
+      bricks = [];
+      for (let c = 0; c < brickColumnCount; c++) {
+        bricks[c] = [];
+        for (let r = 0; r < brickRowCount; r++) {
+          bricks[c][r] = { x: 0, y: 0, status: 1 };
+        }
+      }
+    }
+    initBricks();
+
+    // Eventos de teclado
+    document.addEventListener("keydown", keyDownHandler, false);
+    document.addEventListener("keyup", keyUpHandler, false);
+
+    function keyDownHandler(e) {
+      if (e.key === "Right" || e.key === "ArrowRight") {
+        rightPressed = true;
+      } else if (e.key === "Left" || e.key === "ArrowLeft") {
+        leftPressed = true;
+      }
+    }
+
+    function keyUpHandler(e) {
+      if (e.key === "Right" || e.key === "ArrowRight") {
+        rightPressed = false;
+      } else if (e.key === "Left" || e.key === "ArrowLeft") {
+        leftPressed = false;
+      }
+    }
+
+    // Detección de colisión con ladrillos
+    function collisionDetection() {
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+          const b = bricks[c][r];
+          if (b.status === 1) {
+            if (
+              ballX > b.x &&
+              ballX < b.x + brickWidth &&
+              ballY > b.y &&
+              ballY < b.y + brickHeight
+            ) {
+              ballDY = -ballDY;
+              b.status = 0;
+              brickHitSound.play(); // Efecto de sonido al romper un ladrillo
+            }
+          }
+        }
+      }
+    }
+
+    // Dibujar la pelota
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    // Dibujar la plataforma
+    function drawPaddle() {
+      ctx.beginPath();
+      ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    // Dibujar ladrillos
+    function drawBricks() {
+      const colors = ["#FF5733", "#FFC300", "#28B463", "#5DADE2", "#AF7AC5", "#F39C12"];
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+          if (bricks[c][r].status === 1) {
+            const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+            const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+            bricks[c][r].x = brickX;
+            bricks[c][r].y = brickY;
+            ctx.beginPath();
+            ctx.rect(brickX, brickY, brickWidth, brickHeight);
+            ctx.fillStyle = colors[r % colors.length];
+            ctx.fill();
+            ctx.closePath();
+          }
+        }
+      }
+    }
+
+    // Dibujar vidas restantes
+    function drawLives() {
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#FFF";
+      ctx.fillText("Vidas: " + lives, canvas.width - 100, 20);
+    }
+
+    // Dibujar el juego
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBricks();
+      drawBall();
+      drawPaddle();
+      drawLives();
+      collisionDetection();
+
+      // Rebotar en los bordes
+      if (ballX + ballDX > canvas.width - ballRadius || ballX + ballDX < ballRadius) {
+        ballDX = -ballDX;
+      }
+
+      if (ballY + ballDY < ballRadius) {
+        ballDY = -ballDY;
+      } else if (ballY + ballDY > canvas.height - ballRadius) {
+        if (ballX > paddleX && ballX < paddleX + paddleWidth) {
+          ballDY = -ballDY;
+        } else {
+          lives--;
+          lifeLostSound.play(); // Efecto de sonido al perder una vida
+          if (lives === 0) {
+            setTimeout(() => {
+              if (confirm("Game Over. ¿Quieres intentarlo de nuevo?")) {
+                document.location.reload();
+              }
+            }, 100);
+          } else {
+            ballX = canvas.width / 2;
+            ballY = canvas.height - 30;
+            ballDX = 4;
+            ballDY = -4;
+            paddleX = (canvas.width - paddleWidth) / 2;
+          }
+        }
+      }
+
+      ballX += ballDX;
+      ballY += ballDY;
+
+      if (rightPressed && paddleX < canvas.width - paddleWidth) {
+        paddleX += 7;
+      } else if (leftPressed && paddleX > 0) {
+        paddleX -= 7;
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
