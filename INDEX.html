@@ -1,234 +1,108 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Breakout Game Mejorado</title>
-  <!-- Tailwind CSS desde CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board - Gestión de Proyectos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body { background: linear-gradient(to right, #1e3a8a, #9333ea); color: white; font-family: Arial, sans-serif; }
+        .kanban-board { display: flex; justify-content: space-around; padding: 20px; gap: 15px; }
+        .kanban-column { width: 30%; background: #334155; padding: 15px; border-radius: 8px; min-height: 300px; }
+        .task { background: #475569; padding: 10px; border-radius: 5px; margin: 10px 0; cursor: grab; }
+        .task:hover { background: #64748b; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e293b; padding: 20px; border-radius: 10px; width: 300px; text-align: center; }
+        .modal input, .modal button { margin-top: 10px; width: 100%; padding: 8px; border-radius: 5px; }
+        .modal input { background: #2d3748; color: white; border: none; }
+        .instructions { text-align: center; margin-top: 10px; font-size: 1rem; }
+    </style>
 </head>
-<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen text-white">
-  <h1 class="text-3xl font-bold mb-4">Juego de Breakout Mejorado</h1>
-  <canvas id="gameCanvas" class="bg-black rounded-lg shadow-lg" width="1000" height="600"></canvas>
+<body>
+    <h1 class="text-3xl text-center font-bold mt-4">📌 Tablero Kanban</h1>
+    <p class="instructions">📌 Arrastra y suelta tareas entre columnas. ✏️ Doble clic en una tarea para editarla. 🗑️ Para eliminar una tarea, edítala y deja el campo vacío.</p>
+    <button class="block mx-auto my-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onclick="showModal()">➕ Agregar Tarea</button>
 
-  <!-- Música de fondo -->
-  <audio id="backgroundMusic" src="https://www.bensound.com/bensound-music/bensound-epic.mp3" loop></audio>
-  <audio id="brickHitSound" src="https://www.soundjay.com/button/sounds/button-16.mp3"></audio>
-  <audio id="lifeLostSound" src="https://www.soundjay.com/button/sounds/button-10.mp3"></audio>
-  <button id="toggleMusic" class="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg">🔊 Desactivar Música</button>
+    <div class="kanban-board">
+        <div class="kanban-column" id="pending">
+            <h2 class="text-lg font-bold text-center">🕒 Pendiente</h2>
+        </div>
+        <div class="kanban-column" id="inProgress">
+            <h2 class="text-lg font-bold text-center">⚙️ En Proceso</h2>
+        </div>
+        <div class="kanban-column" id="completed">
+            <h2 class="text-lg font-bold text-center">✅ Completado</h2>
+        </div>
+    </div>
 
-  <!-- Instrucciones -->
-  <div class="mt-6 bg-gray-800 p-4 rounded-lg shadow-md w-3/4">
-    <h2 class="text-2xl font-semibold">Instrucciones:</h2>
-    <ul class="list-disc list-inside">
-      <li>Usa las flechas izquierda (<code>←</code>) y derecha (<code>→</code>) para mover la plataforma.</li>
-      <li>Evita que la pelota caiga al fondo.</li>
-      <li>Destruye todos los bloques para ganar.</li>
-      <li>Tienes 5 vidas. El juego termina cuando las pierdas todas.</li>
-      <li>Haz doble clic en el archivo HTML para ejecutar el juego.</li>
-    </ul>
-  </div>
+    <div id="taskModal" class="modal">
+        <h2>➕ Agregar Tarea</h2>
+        <input type="text" id="taskInput" placeholder="Escribe tu tarea aquí..." class="border p-2 w-full">
+        <button onclick="addTask()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2">Guardar</button>
+        <button onclick="closeModal()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2">Cancelar</button>
+    </div>
 
-  <script>
-    // Configuración del canvas
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-
-    // Reproducir música de fondo automáticamente
-    const backgroundMusic = document.getElementById("backgroundMusic");
-    const brickHitSound = document.getElementById("brickHitSound");
-    const lifeLostSound = document.getElementById("lifeLostSound");
-    backgroundMusic.volume = 0.2; // Ajustar volumen
-    backgroundMusic.play();
-
-    // Botón de control de música
-    const toggleMusicButton = document.getElementById("toggleMusic");
-    let isMusicPlaying = true;
-    toggleMusicButton.addEventListener("click", () => {
-      if (isMusicPlaying) {
-        backgroundMusic.pause();
-        toggleMusicButton.textContent = "🔇 Activar Música";
-      } else {
-        backgroundMusic.play();
-        toggleMusicButton.textContent = "🔊 Desactivar Música";
-      }
-      isMusicPlaying = !isMusicPlaying;
-    });
-
-    // Variables del juego
-    let ballX = canvas.width / 2;
-    let ballY = canvas.height - 30;
-    let ballRadius = 10;
-    let ballDX = 4;
-    let ballDY = -4;
-
-    const paddleHeight = 10;
-    const paddleWidth = 120;
-    let paddleX = (canvas.width - paddleWidth) / 2;
-
-    let rightPressed = false;
-    let leftPressed = false;
-
-    const brickRowCount = 6;
-    const brickColumnCount = 12;
-    const brickWidth = 75;
-    const brickHeight = 25;
-    const brickPadding = 10;
-    const brickOffsetTop = 40;
-    const brickOffsetLeft = 35;
-
-    let bricks = [];
-    let lives = 5;
-
-    // Inicializar ladrillos
-    function initBricks() {
-      bricks = [];
-      for (let c = 0; c < brickColumnCount; c++) {
-        bricks[c] = [];
-        for (let r = 0; r < brickRowCount; r++) {
-          bricks[c][r] = { x: 0, y: 0, status: 1 };
+    <script>
+        function showModal() {
+            document.getElementById('taskModal').style.display = 'block';
         }
-      }
-    }
-    initBricks();
 
-    // Eventos de teclado
-    document.addEventListener("keydown", keyDownHandler, false);
-    document.addEventListener("keyup", keyUpHandler, false);
+        function closeModal() {
+            document.getElementById('taskModal').style.display = 'none';
+        }
 
-    function keyDownHandler(e) {
-      if (e.key === "Right" || e.key === "ArrowRight") {
-        rightPressed = true;
-      } else if (e.key === "Left" || e.key === "ArrowLeft") {
-        leftPressed = true;
-      }
-    }
+        function addTask() {
+            const taskText = document.getElementById('taskInput').value.trim();
+            if (!taskText) return alert("Escribe una tarea");
 
-    function keyUpHandler(e) {
-      if (e.key === "Right" || e.key === "ArrowRight") {
-        rightPressed = false;
-      } else if (e.key === "Left" || e.key === "ArrowLeft") {
-        leftPressed = false;
-      }
-    }
+            const task = document.createElement('div');
+            task.classList.add('task');
+            task.textContent = taskText;
+            task.setAttribute('draggable', true);
+            task.ondblclick = function () { editTask(this); };
 
-    // Detección de colisión con ladrillos
-    function collisionDetection() {
-      for (let c = 0; c < brickColumnCount; c++) {
-        for (let r = 0; r < brickRowCount; r++) {
-          const b = bricks[c][r];
-          if (b.status === 1) {
-            if (
-              ballX > b.x &&
-              ballX < b.x + brickWidth &&
-              ballY > b.y &&
-              ballY < b.y + brickHeight
-            ) {
-              ballDY = -ballDY;
-              b.status = 0;
-              brickHitSound.play(); // Efecto de sonido al romper un ladrillo
+            document.getElementById('pending').appendChild(task);
+            saveData();
+            closeModal();
+        }
+
+        function editTask(task) {
+            const newText = prompt("Editar tarea:", task.textContent);
+            if (newText !== null) {
+                task.textContent = newText || task.remove();
+                saveData();
             }
-          }
         }
-      }
-    }
 
-    // Dibujar la pelota
-    function drawBall() {
-      ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "white";
-      ctx.fill();
-      ctx.closePath();
-    }
-
-    // Dibujar la plataforma
-    function drawPaddle() {
-      ctx.beginPath();
-      ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
-      ctx.fillStyle = "white";
-      ctx.fill();
-      ctx.closePath();
-    }
-
-    // Dibujar ladrillos
-    function drawBricks() {
-      const colors = ["#FF5733", "#FFC300", "#28B463", "#5DADE2", "#AF7AC5", "#F39C12"];
-      for (let c = 0; c < brickColumnCount; c++) {
-        for (let r = 0; r < brickRowCount; r++) {
-          if (bricks[c][r].status === 1) {
-            const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
-            const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
-            bricks[c][r].x = brickX;
-            bricks[c][r].y = brickY;
-            ctx.beginPath();
-            ctx.rect(brickX, brickY, brickWidth, brickHeight);
-            ctx.fillStyle = colors[r % colors.length];
-            ctx.fill();
-            ctx.closePath();
-          }
+        function saveData() {
+            const data = {
+                pending: document.getElementById('pending').innerHTML,
+                inProgress: document.getElementById('inProgress').innerHTML,
+                completed: document.getElementById('completed').innerHTML
+            };
+            localStorage.setItem('kanbanData', JSON.stringify(data));
         }
-      }
-    }
 
-    // Dibujar vidas restantes
-    function drawLives() {
-      ctx.font = "16px Arial";
-      ctx.fillStyle = "#FFF";
-      ctx.fillText("Vidas: " + lives, canvas.width - 100, 20);
-    }
-
-    // Dibujar el juego
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBricks();
-      drawBall();
-      drawPaddle();
-      drawLives();
-      collisionDetection();
-
-      // Rebotar en los bordes
-      if (ballX + ballDX > canvas.width - ballRadius || ballX + ballDX < ballRadius) {
-        ballDX = -ballDX;
-      }
-
-      if (ballY + ballDY < ballRadius) {
-        ballDY = -ballDY;
-      } else if (ballY + ballDY > canvas.height - ballRadius) {
-        if (ballX > paddleX && ballX < paddleX + paddleWidth) {
-          ballDY = -ballDY;
-        } else {
-          lives--;
-          lifeLostSound.play(); // Efecto de sonido al perder una vida
-          if (lives === 0) {
-            setTimeout(() => {
-              if (confirm("Game Over. ¿Quieres intentarlo de nuevo?")) {
-                document.location.reload();
-              }
-            }, 100);
-          } else {
-            ballX = canvas.width / 2;
-            ballY = canvas.height - 30;
-            ballDX = 4;
-            ballDY = -4;
-            paddleX = (canvas.width - paddleWidth) / 2;
-          }
+        function loadData() {
+            const data = JSON.parse(localStorage.getItem('kanbanData'));
+            if (data) {
+                document.getElementById('pending').innerHTML = data.pending;
+                document.getElementById('inProgress').innerHTML = data.inProgress;
+                document.getElementById('completed').innerHTML = data.completed;
+            }
         }
-      }
 
-      ballX += ballDX;
-      ballY += ballDY;
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
 
-      if (rightPressed && paddleX < canvas.width - paddleWidth) {
-        paddleX += 7;
-      } else if (leftPressed && paddleX > 0) {
-        paddleX -= 7;
-      }
-
-      requestAnimationFrame(draw);
-    }
-
-    draw();
-  </script>
+            ['pending', 'inProgress', 'completed'].forEach(id => {
+                new Sortable(document.getElementById(id), {
+                    group: 'kanban',
+                    animation: 150,
+                    onEnd: saveData
+                });
+            });
+        });
+    </script>
 </body>
 </html>
